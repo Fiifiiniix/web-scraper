@@ -1,14 +1,13 @@
-import dash
-from dash import dcc, html, Output, Input
-import pandas as pd
-import plotly.graph_objs as go
-import datetime
 import os
 import json
-from sklearn.linear_model import LinearRegression
+import datetime
+import pandas as pd
 import numpy as np
+from sklearn.linear_model import LinearRegression
+import plotly.graph_objs as go
+from dash import Dash, html, dcc, Input, Output, State, ctx
 
-app = dash.Dash(__name__)
+app = Dash(__name__)
 app.title = "BTC Price Dashboard"
 
 # Chargement des données
@@ -73,6 +72,13 @@ app.layout = html.Div([
     dcc.Graph(id="price-graph"),
 
     html.Div(id="daily-report", style={"margin": "0 auto", "width": "60%", "fontSize": 18, "marginTop": "40px"}),
+    
+    html.Div([
+        html.Button("📥 Télécharger CSV", id="btn_csv", n_clicks=0),
+        dcc.Download(id="download-dataframe-csv"),
+        html.Button("📥 Télécharger rapport JSON", id="btn_json", n_clicks=0),
+        dcc.Download(id="download-dataframe-json")
+    ], style={"marginTop": "30px", "textAlign": "center"}),
 
     dcc.Interval(id="interval", interval=60*1000, n_intervals=0)  # toutes les 60 secondes
 ], style={"fontFamily": "Arial, sans-serif", "padding": "20px"})
@@ -115,19 +121,31 @@ def update_dashboard(n_clicks, n_intervals, selected_range):
 
     report = load_daily_report()
     if report:
-        report_text = html.Div([
-            html.H3("📄 Rapport journalier", style={"textAlign": "center"}),
+        report_text = html.Div(
+        [
+            html.H3("📄 Rapport journalier", style={"textAlign": "center", "marginBottom": "20px"}),
             html.Ul([
-                html.Li(f"Nombre de points : {report.get('count', 'N/A')}"),
-                html.Li(f"Heure de début : {report.get('start_time', 'N/A')}"),
-                html.Li(f"Heure de fin : {report.get('end_time', 'N/A')}"),
-                html.Li(f"Premier prix : {report.get('first', 'N/A')} USD"),
-                html.Li(f"Dernier prix : {report.get('last', 'N/A')} USD"),
-                html.Li(f"Minimum : {report.get('min', 'N/A')} USD"),
-                html.Li(f"Maximum : {report.get('max', 'N/A')} USD"),
-                html.Li(f"Moyenne : {report.get('avg', 'N/A')} USD")
+                html.Li(f"Nombre de points : {report.get('count')}"),
+                html.Li(f"Heure de début : {report.get('start_time')}"),
+                html.Li(f"Heure de fin : {report.get('end_time')}"),
+                html.Li(f"Premier prix : {report.get('first')} USD"),
+                html.Li(f"Dernier prix : {report.get('last')} USD"),
+                html.Li(f"Minimum : {report.get('min')} USD"),
+                html.Li(f"Maximum : {report.get('max')} USD"),
+                html.Li(f"Moyenne : {report.get('mean')} USD"),
             ])
-        ])
+        ],
+        style={
+            "width": "50%",
+            "margin": "30px auto",
+            "padding": "20px",
+            "border": "2px solid #ccc",
+            "borderRadius": "10px",
+            "backgroundColor": "#fefefe",
+            "boxShadow": "0px 2px 12px rgba(0,0,0,0.1)",
+            "textAlign": "left"
+        }
+    )
 
     else:
         report_text = html.Div([
@@ -137,6 +155,27 @@ def update_dashboard(n_clicks, n_intervals, selected_range):
 
     update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return f"Dernier prix : {latest_price:.2f} USD", figure, report_text, f"Dernière mise à jour : {update_time}"
+
+# Télécharger le fichier CSV
+@app.callback(
+    Output("download-dataframe-csv", "data"),
+    Input("btn_csv", "n_clicks"),
+    prevent_initial_call=True
+)
+def download_csv(n_clicks):
+    df = pd.read_csv("Scraper/btc_prices.csv", names=["datetime", "price"])
+    return dcc.send_data_frame(df.to_csv, "btc_prices.csv")
+
+
+# Télécharger le rapport JSON
+app.callback(
+    Output("download-dataframe-json", "data"),
+    Input("btn_json", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_json(n_clicks):
+    df = pd.read_csv("Scraper/btc_prices.csv", names=["datetime", "price"])
+    return dict(content=df.to_json(orient="records", indent=2), filename="btc_prices.json")
 
 
 if __name__ == "__main__":
