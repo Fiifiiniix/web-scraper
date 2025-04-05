@@ -1,105 +1,143 @@
 import dash
-from dash import html, dcc
-from dash.dependencies import Input, Output
+from dash import dcc, html, Output, Input
 import pandas as pd
 import plotly.graph_objs as go
-import json
+import datetime
 import os
-from datetime import datetime
+import json
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
 app = dash.Dash(__name__)
-app.title = "BTC Dashboard"
+app.title = "BTC Price Dashboard"
 
-# Chemins
-base_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(base_dir, "..", "Scraper", "btc_prices.csv")
-report_dir = os.path.join(base_dir, "..", "Reports", "DailyReports")
-
-# Chargement CSV
+# Chargement des données
 def load_data():
-    df = pd.read_csv(csv_path, names=["datetime", "price"])
+    path = os.path.join(os.path.dirname(__file__), "../Scraper/btc_prices.csv")
+    df = pd.read_csv(path, names=["datetime", "price"])
     df["datetime"] = pd.to_datetime(df["datetime"])
-    df["price"] = pd.to_numeric(df["price"], errors='coerce')
-    df = df.dropna()
     df["sma_10"] = df["price"].rolling(window=10).mean()
 
-    # Régression linéaire sur les 30 derniers points
-    if len(df) >= 30:
-        X = np.arange(len(df[-30:])).reshape(-1, 1)
-        y = df["price"].values[-30:]
-        model = LinearRegression().fit(X, y)
-        y_pred = model.predict(X)
-        df["prediction"] = [None] * (len(df) - 30) + list(y_pred)
+    # Prédiction linéaire simple
+    df["timestamp"] = df["datetime"].astype(np.int64) // 10 ** 9
+    X = df["timestamp"].values.reshape(-1, 1)
+    y = df["price"].values
+    if len(X) > 1:
+        model = LinearRegression()
+        model.fit(X, y)
+        df["prediction"] = model.predict(X)
     else:
-        df["prediction"] = None
+        df["prediction"] = df["price"]
 
     return df
 
-# Chargement rapport JSON
+# Chargement du rapport
 def load_daily_report():
-    today = datetime.now().strftime("%Y-%m-%d")
-    report_path = os.path.join(report_dir, f"report-{today}.json")
-    print(f">>> Chemin recherché : {report_path}")
-    print(f">>> Existe ? {os.path.exists(report_path)}")
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    report_path = os.path.join(os.path.dirname(__file__), "../Reports/DailyReports", f"report-{today}.json")
+    print(">>> Chemin recherché :", report_path)
+    print(">>> Existe ?", os.path.exists(report_path))
     if os.path.exists(report_path):
         with open(report_path) as f:
             return json.load(f)
     return None
 
+# Layout de l'application
 app.layout = html.Div([
-    html.H1("📊 Bitcoin Price Dashboard"),
-    html.Div(id="last-update", style={"textAlign": "center", "marginBottom": 20}),
-    html.Div(id="last-price", style={"fontSize": 24, "textAlign": "center"}),
-    html.Button("🔄 Rafraîchir", id="refresh-button", n_clicks=0, style={"marginBottom": "20px"}),
-    dcc.Graph(id="price-graph"),
-    html.H2("📝 Rapport journalier"),
-    html.Div(id="daily-report"),
-    dcc.Interval(id="interval", interval=60*1000, n_intervals=0)
-], style={"fontFamily": "Arial", "padding": "20px"})
+    html.H1("📊 Tableau de bord - Prix du Bitcoin", style={"textAlign": "center"}),
 
+    html.Div(id="last-price", style={"textAlign": "center", "fontSize": 24, "marginBottom": "10px"}),
+    html.Div(id="last-update", style={"textAlign": "center", "fontSize": 16, "marginBottom": "20px"}),
+
+    html.Div([
+        html.Label("Période à afficher :"),
+        dcc.Dropdown(
+            id="time-range-dropdown",
+            options=[
+                {"label": "30 minutes", "value": "30min"},
+                {"label": "1 heure", "value": "1h"},
+                {"label": "12 heures", "value": "12h"},
+                {"label": "24 heures", "value": "24h"},
+                {"label": "Tout", "value": "all"}
+            ],
+            value="1h",
+            clearable=False,
+            style={"width": "200px"}
+        )
+    ], style={"textAlign": "center", "marginBottom": "20px"}),
+
+    html.Div([
+        html.Button("🔁 Rafraîchir", id="refresh-button", n_clicks=0)
+    ], style={"textAlign": "center", "marginBottom": "20px"}),
+
+    dcc.Graph(id="price-graph"),
+
+    html.Div(id="daily-report", style={"margin": "0 auto", "width": "60%", "fontSize": 18, "marginTop": "40px"}),
+
+    dcc.Interval(id="interval", interval=60*1000, n_intervals=0)  # toutes les 60 secondes
+], style={"fontFamily": "Arial, sans-serif", "padding": "20px"})
+
+
+# Callback pour tout mettre à jour
 @app.callback(
     Output("last-price", "children"),
     Output("price-graph", "figure"),
     Output("daily-report", "children"),
     Output("last-update", "children"),
     Input("refresh-button", "n_clicks"),
-    Input("interval", "n_intervals")
+    Input("interval", "n_intervals"),
+    Input("time-range-dropdown", "value")
 )
-
-def update_dashboard(n_clicks, n_intervals):
-    
+def update_dashboard(n_clicks, n_intervals, selected_range):
     df = load_data()
+
+    # Filtrage selon la période choisie
+    now = datetime.datetime.now()
+    if selected_range != "all":
+        time_deltas = {
+            "30min": datetime.timedelta(minutes=30),
+            "1h": datetime.timedelta(hours=1),
+            "12h": datetime.timedelta(hours=12),
+            "24h": datetime.timedelta(hours=24)
+        }
+        min_time = now - time_deltas[selected_range]
+        df = df[df["datetime"] >= min_time]
+
     latest_price = df["price"].iloc[-1]
-    latest_time = df["datetime"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S")
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["datetime"], y=df["price"], mode="lines", name="BTC Price"))
-    fig.add_trace(go.Scatter(x=df["datetime"], y=df["sma_10"], mode="lines", name="SMA 10"))
-    fig.add_trace(go.Scatter(x=df["datetime"], y=df["prediction"], mode="lines", name="Linear Regression"))
-
-    fig.update_layout(title="Évolution du prix BTC (USD)",
-                      xaxis_title="Heure",
-                      yaxis_title="Prix ($)",
-                      xaxis=dict(showgrid=True),
-                      yaxis=dict(showgrid=True))
+    figure = {
+        "data": [
+            go.Scatter(x=df["datetime"], y=df["price"], name="Prix"),
+            go.Scatter(x=df["datetime"], y=df["sma_10"], name="Moyenne mobile (10)"),
+            go.Scatter(x=df["datetime"], y=df["prediction"], name="Régression linéaire", line={"dash": "dash"})
+        ],
+        "layout": go.Layout(title="Évolution du prix", xaxis={"title": "Date"}, yaxis={"title": "Prix (USD)", "showgrid": True})
+    }
 
     report = load_daily_report()
     if report:
-        table = html.Table([
-            html.Tr([html.Th(k), html.Td(f"{v:.2f}" if isinstance(v, float) else v)])
-            for k, v in report.items()
-        ], style={"margin": "0 auto", "fontSize": 18, "border": "1px solid black"})
-    else:
-        table = html.Div("Aucun rapport disponible pour aujourd'hui.")
+        report_text = html.Div([
+            html.H3("📄 Rapport journalier", style={"textAlign": "center"}),
+            html.Ul([
+                html.Li(f"Nombre de points : {report.get('count', 'N/A')}"),
+                html.Li(f"Heure de début : {report.get('start_time', 'N/A')}"),
+                html.Li(f"Heure de fin : {report.get('end_time', 'N/A')}"),
+                html.Li(f"Premier prix : {report.get('first', 'N/A')} USD"),
+                html.Li(f"Dernier prix : {report.get('last', 'N/A')} USD"),
+                html.Li(f"Minimum : {report.get('min', 'N/A')} USD"),
+                html.Li(f"Maximum : {report.get('max', 'N/A')} USD"),
+                html.Li(f"Moyenne : {report.get('avg', 'N/A')} USD")
+            ])
+        ])
 
-    return (
-        f"💰 Dernier prix : {latest_price:.2f} USD (à {latest_time})",
-        fig,
-        table,
-        f"📅 Dernière mise à jour : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    )
+    else:
+        report_text = html.Div([
+            html.H3("📄 Rapport journalier"),
+            html.P("Aucun rapport disponible pour aujourd'hui.")
+        ])
+
+    update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return f"Dernier prix : {latest_price:.2f} USD", figure, report_text, f"Dernière mise à jour : {update_time}"
+
 
 if __name__ == "__main__":
-	app.run(debug=True, host="0.0.0.0", port=8050)
+    app.run(debug=True, host="0.0.0.0", port=8050)
