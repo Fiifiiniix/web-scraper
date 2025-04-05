@@ -9,6 +9,7 @@ from dash import Dash, html, dcc, Input, Output, State, ctx
 
 app = Dash(__name__)
 app.title = "BTC Price Dashboard"
+base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Chargement des données
 def load_data():
@@ -31,15 +32,18 @@ def load_data():
     return df
 
 # Chargement du rapport
-def load_daily_report():
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    report_path = os.path.join(os.path.dirname(__file__), "../Reports/DailyReports", f"report-{today}.json")
-    print(">>> Chemin recherché :", report_path)
-    print(">>> Existe ?", os.path.exists(report_path))
+def load_daily_report(selected_file=None):
+    reports_dir = os.path.join(base_dir, "..", "Reports", "DailyReports")
+    if selected_file:
+        report_path = os.path.join(reports_dir, selected_file)
+    else:
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        report_path = os.path.join(reports_dir, f"report-{today}.json")
     if os.path.exists(report_path):
         with open(report_path) as f:
             return json.load(f)
     return None
+
 
 # Layout de l'application
 app.layout = html.Div([
@@ -71,6 +75,20 @@ app.layout = html.Div([
 
     dcc.Graph(id="price-graph"),
 
+    html.Div([
+        html.Label("Historique des rapports", style={"fontWeight": "bold", "marginTop": "30px"}),
+        dcc.Dropdown(
+            id="report-selector",
+            options=[
+                {"label": f, "value": f}
+                for f in sorted(os.listdir(os.path.join(base_dir, "..", "Reports", "DailyReports")))
+                if f.endswith(".json")
+            ],
+            placeholder="Sélectionner un rapport",
+            style={"width": "60%", "margin": "0 auto"}
+        ),
+    ], style={"textAlign": "center", "marginBottom": "20px"}),
+
     html.Div(id="daily-report", style={"margin": "0 auto", "width": "60%", "fontSize": 18, "marginTop": "40px"}),
     
     html.Div([
@@ -92,10 +110,13 @@ app.layout = html.Div([
     Output("last-update", "children"),
     Input("refresh-button", "n_clicks"),
     Input("interval", "n_intervals"),
+    Input("report-selector", "value"),
     Input("time-range-dropdown", "value")
 )
-def update_dashboard(n_clicks, n_intervals, selected_range):
+def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
     df = load_data()
+    if df.empty:
+        return "Pas de données", go.Figure(), "Aucun rapport disponible", ""
 
     # Filtrage selon la période choisie
     now = datetime.datetime.now()
@@ -106,6 +127,7 @@ def update_dashboard(n_clicks, n_intervals, selected_range):
             "12h": datetime.timedelta(hours=12),
             "24h": datetime.timedelta(hours=24)
         }
+        selected_range = selected_range or "24h"
         min_time = now - time_deltas[selected_range]
         df = df[df["datetime"] >= min_time]
 
@@ -152,6 +174,27 @@ def update_dashboard(n_clicks, n_intervals, selected_range):
             html.H3("📄 Rapport journalier"),
             html.P("Aucun rapport disponible pour aujourd'hui.")
         ])
+
+# Chargement et affichage du rapport journalier sélectionné
+    report = load_daily_report(selected_report)
+    if report:
+        report_text = html.Div([
+            html.H4("Résumé journalier"),
+            html.Div([
+                html.P(f"{key}: {value}") for key, value in report.items()
+            ])
+        ], style={
+            "border": "1px solid #ccc",
+            "padding": "20px",
+            "borderRadius": "10px",
+            "width": "60%",
+            "margin": "0 auto",
+            "textAlign": "left",
+            "backgroundColor": "#f9f9f9"
+        })
+    else:
+        report_text = "Aucun rapport disponible"
+
 
     update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return f"Dernier prix : {latest_price:.2f} USD", figure, report_text, f"Dernière mise à jour : {update_time}"
