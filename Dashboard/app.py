@@ -52,6 +52,7 @@ app.layout = html.Div([
     html.H1("📊 Bitcoin Price Dashboard"),
     html.Div(id="last-update", style={"textAlign": "center", "marginBottom": 20}),
     html.Div(id="last-price", style={"fontSize": 24, "textAlign": "center"}),
+    html.Button("🔄 Rafraîchir", id="refresh-button", n_clicks=0, style={"marginBottom": "20px"}),
     dcc.Graph(id="price-graph"),
     html.H2("📝 Rapport journalier"),
     html.Div(id="daily-report"),
@@ -59,13 +60,16 @@ app.layout = html.Div([
 ], style={"fontFamily": "Arial", "padding": "20px"})
 
 @app.callback(
-    [Output("last-price", "children"),
-     Output("price-graph", "figure"),
-     Output("daily-report", "children"),
-     Output("last-update", "children")],
-    [Input("interval", "n_intervals")]
+    Output("last-price", "children"),
+    Output("price-graph", "figure"),
+    Output("daily-report", "children"),
+    Output("last-update", "children"),
+    Input("refresh-button", "n_clicks"),
+    Input("interval", "n_intervals")
 )
-def update_dashboard(n):
+
+def update_dashboard(n_clicks, n_intervals):
+    
     df = load_data()
     latest_price = df["price"].iloc[-1]
     latest_time = df["datetime"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S")
