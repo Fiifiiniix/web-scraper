@@ -49,7 +49,7 @@ def load_daily_report(selected_file=None):
 app.layout = html.Div([
     html.H1("📊 Tableau de bord - Prix du Bitcoin", style={"textAlign": "center"}),
 
-    html.Div(id="last-price", style={"textAlign": "center", "fontSize": 24, "marginBottom": "10px"}),
+   # html.Div(id="last-price", style={"textAlign": "center", "fontSize": 24, "marginBottom": "10px"}),
     html.Div(id="last-update", style={"textAlign": "center", "fontSize": 16, "marginBottom": "20px"}),
 
     html.Div([
@@ -105,7 +105,7 @@ app.layout = html.Div([
 
 # Callback pour tout mettre à jour
 @app.callback(
-    Output("last-price", "children"),
+   # Output("last-price", "children"),
     Output("price-graph", "figure"),
     Output("daily-report", "children"),
     Output("last-update", "children"),
@@ -139,7 +139,7 @@ def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
     else:
         df_filtered = df  # fallback de sécurité
 
-    latest_price_text = "Aucune donnée"
+    #latest_price_text = "Aucune donnée"
     figure = go.Figure()
 
     if df_filtered.empty:
@@ -228,7 +228,7 @@ def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
 
 
     update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"Dernier prix : {latest_price_text}", figure, report_text, f"Dernière mise à jour : {update_time}"
+    return  figure, report_text, f"Dernière mise à jour : {update_time}"
 
 # Télécharger le fichier CSV
 @app.callback(
@@ -242,15 +242,14 @@ def download_csv(n_clicks):
 
 
 # Télécharger le rapport JSON
-app.callback(
+@app.callback(
     Output("download-dataframe-json", "data"),
     Input("btn_json", "n_clicks"),
     prevent_initial_call=True,
 )
 def download_json(n_clicks):
     df = pd.read_csv("Scraper/btc_prices.csv", names=["datetime", "price"])
-    return dict(content=df.to_json(orient="records", indent=2), filename="btc_prices.json")
-
+    return dict(content=df.to_json(orient="records",indent=2), filename="btc_prices.json")
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050)
