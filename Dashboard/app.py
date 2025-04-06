@@ -139,11 +139,16 @@ def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
     else:
         df_filtered = df  # fallback de sécurité
 
+    latest_price_text = "Aucune donnée"
+    figure = go.Figure()
+
     if df_filtered.empty:
         latest_price = "Aucune donnée"
-        figure = go.Figure()
+        latest_price_text = "Aucune donnée"
+        figure = go.figure()
     else:
         latest_price = df_filtered["price"].iloc[-1]
+        lastest_price_text = f"{float(latest_price):.2f} USD"
 
     xaxis_config = {"title": "Date"}
 
@@ -223,8 +228,7 @@ def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
 
 
     update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    latest_price = float(latest_price)
-    return f"Dernier prix : {latest_price:.2f} USD", figure, report_text, f"Dernière mise à jour : {update_time}"
+    return f"Dernier prix : {latest_price_text}", figure, report_text, f"Dernière mise à jour : {update_time}"
 
 # Télécharger le fichier CSV
 @app.callback(
