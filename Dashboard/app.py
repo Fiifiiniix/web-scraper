@@ -223,6 +223,7 @@ def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
 
 
     update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    latest_price = float(latest_price)
     return f"Dernier prix : {latest_price:.2f} USD", figure, report_text, f"Dernière mise à jour : {update_time}"
 
 # Télécharger le fichier CSV
