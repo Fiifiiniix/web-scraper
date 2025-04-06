@@ -15,7 +15,7 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 def load_data():
     path = os.path.join(os.path.dirname(__file__), "../Scraper/btc_prices.csv")
     df = pd.read_csv(path, names=["datetime", "price"])
-    df["datetime"] = pd.to_datetime(df["datetime"])
+    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
     df["sma_10"] = df["price"].rolling(window=10).mean()
 
     # Prédiction linéaire simple
@@ -57,13 +57,14 @@ app.layout = html.Div([
         dcc.Dropdown(
             id="time-range-dropdown",
             options=[
-                {"label": "30 minutes", "value": "30min"},
-                {"label": "1 heure", "value": "1h"},
-                {"label": "12 heures", "value": "12h"},
-                {"label": "24 heures", "value": "24h"},
-                {"label": "Tout", "value": "all"}
+                {"label": "1 heure", "value": "last_hour"},
+                {"label": "6 heures", "value": "last_6_hours"},
+                {"label": "24 heures", "value": "last_day"},
+                {"label": "3 jours", "value": "last_3_days"},
+                {"label": "7 jours", "value": "last_week"},
+                {"label": "Tout", "value": "all"},
             ],
-            value="1h",
+            value="last_day",
             clearable=False,
             style={"width": "200px"}
         )
@@ -120,25 +121,50 @@ def update_dashboard(n_clicks, n_intervals, selected_report, selected_range):
 
     # Filtrage selon la période choisie
     now = datetime.datetime.now()
-    if selected_range != "all":
-        time_deltas = {
-            "30min": datetime.timedelta(minutes=30),
-            "1h": datetime.timedelta(hours=1),
-            "12h": datetime.timedelta(hours=12),
-            "24h": datetime.timedelta(hours=24)
-        }
-        selected_range = selected_range or "24h"
-        min_time = now - time_deltas[selected_range]
-        df = df[df["datetime"] >= min_time]
+    time_deltas = {
+        "last_hour": datetime.timedelta(hours=1),
+        "last_6_hours": datetime.timedelta(hours=6),
+        "last_day": datetime.timedelta(days=1),
+        "last_3_days": datetime.timedelta(days=3),
+        "last_week": datetime.timedelta(weeks=1),
+        "all": None
+    }
 
-    latest_price = df["price"].iloc[-1]
+    if selected_range in time_deltas:
+        min_time = now - time_deltas[selected_range] if time_deltas[selected_range] else None
+        if min_time:
+            df_filtered = df[df["datetime"] >= min_time]
+        else:
+            df_filtered = df
+    else:
+        df_filtered = df  # fallback de sécurité
+
+    if df_filtered.empty:
+        latest_price = "Aucune donnée"
+        figure = go.Figure()
+    else:
+        latest_price = df_filtered["price"].iloc[-1]
+
+    xaxis_config = {"title": "Date"}
+
+    if not df_filtered.empty:
+        if selected_range != "all":
+            xaxis_config["range"] = [
+                df_filtered["datetime"].min(),
+                df_filtered["datetime"].max()
+            ]
+
+
     figure = {
         "data": [
             go.Scatter(x=df["datetime"], y=df["price"], name="Prix"),
             go.Scatter(x=df["datetime"], y=df["sma_10"], name="Moyenne mobile (10)"),
             go.Scatter(x=df["datetime"], y=df["prediction"], name="Régression linéaire", line={"dash": "dash"})
         ],
-        "layout": go.Layout(title="Évolution du prix", xaxis={"title": "Date"}, yaxis={"title": "Prix (USD)", "showgrid": True})
+        "layout": go.Layout(
+            title="Évolution du prix", 
+            xaxis=xaxis_config,
+            yaxis={"title": "Prix (USD)", "showgrid": True})
     }
 
     report = load_daily_report()
