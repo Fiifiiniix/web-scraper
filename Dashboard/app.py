@@ -10,6 +10,9 @@ from dash import Dash, html, dcc, Input, Output, State, ctx
 app = Dash(__name__)
 app.title = "BTC Price Dashboard"
 base_dir = os.path.dirname(os.path.abspath(__file__))
+report_folder = os.path.join(base_dir, "..", "Reports", "DailyReports")
+report_files = sorted ([f for f in os.listdir(report_folder) if f.endswith(".json")])
+
 
 # Chargement des données
 def load_data():
@@ -81,17 +84,13 @@ app.layout = html.Div([
         dcc.Dropdown(
             id="report-selector",
             options=[
-                {"label": f, "value": f}
-                for f in sorted(os.listdir(os.path.join(base_dir, "..", "Reports", "DailyReports")))
-                if f.endswith(".json")
-            ],
+                {"label": f, "value": f} for f in report_files],
             placeholder="Sélectionner un rapport",
             style={"width": "60%", "margin": "0 auto"}
         ),
     ], style={"textAlign": "center", "marginBottom": "20px"}),
 
-    html.Div(id="daily-report", style={"margin": "0 auto", "width": "60%", "fontSize": 18, "marginTop": "40px"}),
-    
+    html.Div(id="daily-report", style={"margin": "0 auto", "width": "60%", "fontSize": 18, "marginTop": "40px"}),    
     html.Div([
         html.Button("📥 Télécharger CSV", id="btn_csv", n_clicks=0),
         dcc.Download(id="download-dataframe-csv"),
